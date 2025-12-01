@@ -202,8 +202,8 @@ pub struct EngineeringModeData {
 
 #[derive(Debug)]
 pub struct Target {
-    distance: u16, // cm
-    energy: u8,    // dB ??
+    pub distance: u16, // cm
+    pub energy: u8,    // dB ??
 }
 
 fn read_basic_target_data(buffer: &[u8]) -> BasicTargetData {
