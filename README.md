@@ -52,6 +52,8 @@ RUST_LOG=trace cargo run --example main
 - tf2_ros
 - rosbag2
 - rviz2
+## schematic
+<img width="822" height="741" alt="Untitled Diagram drawio" src="https://github.com/user-attachments/assets/cb502d66-dc16-40f6-8098-a0f696b19433" />
 
 ## LD24
 LD2412 and LD2450 driver, made in rust.
