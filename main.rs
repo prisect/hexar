@@ -1,4 +1,5 @@
 use hexar::scanner::{FrequencyScanner, FrequencyRange};
+use hexar::tracker_demo;
 use std::time::Duration;
 use log::{info, warn};
 use env_logger::Env;
@@ -21,6 +22,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ScanMode::Refined(target_freq) => run_refined_scan(&mut scanner, target_freq, step_size)?,
         ScanMode::Full => run_full_scan(&mut scanner)?,
         ScanMode::Continuous(duration) => run_continuous_scan(&mut scanner, duration)?,
+        ScanMode::MultiTargetDemo => {
+            tracker_demo::run_multi_target_demo()?;
+            return Ok(());
+        },
+        ScanMode::StressTest => {
+            tracker_demo::run_stress_test()?;
+            return Ok(());
+        },
     }
     
     // Print summary
@@ -35,6 +44,8 @@ enum ScanMode {
     Refined(f32),
     Full,
     Continuous(Duration),
+    MultiTargetDemo,
+    StressTest,
 }
 
 fn get_user_input() -> Result<(FrequencyRange, f32, ScanMode, f32), Box<dyn std::error::Error>> {
@@ -61,8 +72,10 @@ fn get_user_input() -> Result<(FrequencyRange, f32, ScanMode, f32), Box<dyn std:
     println!("2. Refined scan");
     println!("3. Full scan");
     println!("4. Continuous scan");
+    println!("5. Multi-target tracking demo");
+    println!("6. Stress test");
     
-    let mode_choice = get_numeric_input("Enter mode (1-4): ")? as i32;
+    let mode_choice = get_numeric_input("Enter mode (1-6): ")? as i32;
     
     let scan_mode = match mode_choice {
         1 => ScanMode::Quick,
@@ -75,6 +88,8 @@ fn get_user_input() -> Result<(FrequencyRange, f32, ScanMode, f32), Box<dyn std:
             let duration_secs = get_numeric_input("Enter scan duration (seconds): ")?;
             ScanMode::Continuous(Duration::from_secs(duration_secs as u64))
         },
+        5 => ScanMode::MultiTargetDemo,
+        6 => ScanMode::StressTest,
         _ => {
             warn!("Invalid mode selected, defaulting to full scan");
             ScanMode::Full
