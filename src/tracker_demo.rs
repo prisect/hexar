@@ -14,7 +14,7 @@ pub fn run_multi_target_demo() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nAdding targets to antennas...");
     
     // Add targets to different antennas
-    let target1 = tracker.add_target(0, Vector2::new(1.0, 2.0));
+    let _target_id = tracker.add_target(0, Vector2::new(1.0, 1.0));
     let target2 = tracker.add_target(1, Vector2::new(-1.0, 3.0));
     let target3 = tracker.add_target(0, Vector2::new(2.0, 1.0));
     let _target4 = tracker.add_target(2, Vector2::new(0.0, -2.0));
@@ -26,11 +26,6 @@ pub fn run_multi_target_demo() -> Result<(), Box<dyn std::error::Error>> {
     
     for step in 0..50 {
         // Update target positions
-        if let Some(id) = target1 {
-            let new_pos = Vector2::new(1.0 + step as f32 * 0.1, 2.0 - step as f32 * 0.2);
-            tracker.update_target(id, new_pos);
-        }
-        
         if let Some(id) = target2 {
             let new_pos = Vector2::new(-1.0 + step as f32 * 0.05, 3.0);
             tracker.update_target(id, new_pos);
@@ -74,9 +69,9 @@ pub fn run_multi_target_demo() -> Result<(), Box<dyn std::error::Error>> {
     println!("Total targets: {}", tracker.get_target_count());
     
     for antenna_id in 0..4 {
-        let count = tracker.get_target_count_by_antenna(antenna_id);
-        if count > 0 {
-            println!("Antenna {}: {} targets", antenna_id, count);
+        let antenna_count = tracker.get_target_count_by_antenna(antenna_id);
+        if antenna_count > 0 {
+            println!("Antenna {}: {} targets", antenna_id, antenna_count);
             
             let targets = tracker.get_targets_by_antenna(antenna_id);
             for target in targets {
@@ -104,7 +99,7 @@ pub fn run_stress_test() -> Result<(), Box<dyn std::error::Error>> {
         
         for i in 0..10 { // Try to add 10 targets (max is 8)
             let pos = Vector2::new(i as f32 * 0.5, antenna as f32 * 0.5);
-            if let Some(target_id) = tracker.add_target(antenna, pos) {
+            if let Some(_target_id) = tracker.add_target(antenna, pos) {
                 print!("✓");
             } else {
                 print!("✗");

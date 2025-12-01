@@ -153,7 +153,7 @@ pub struct FallDetector {
     gravity_threshold: f32,
     velocity_threshold: f32,
     acceleration_threshold: f32,
-    time_window: Duration,
+    time_window: Duration, // Kept for future use
 }
 
 impl FallDetector {
@@ -164,6 +164,11 @@ impl FallDetector {
             acceleration_threshold: 15.0, // m/s²
             time_window: Duration::from_millis(500),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_time_window(&self) -> Duration {
+        self.time_window
     }
 
     pub fn analyze_fall_risk(&self, target: &TrackedTarget) -> f32 {
@@ -217,7 +222,7 @@ pub struct MultiTargetTracker {
     fall_detector: FallDetector,
     next_target_id: u32,
     max_targets_per_antenna: usize,
-    antenna_count: u8,
+    antenna_count: u8, // Kept for validation
 }
 
 impl MultiTargetTracker {
@@ -230,6 +235,11 @@ impl MultiTargetTracker {
             max_targets_per_antenna: 8,
             antenna_count,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_antenna_count(&self) -> u8 {
+        self.antenna_count
     }
 
     pub fn add_target(&mut self, antenna_id: u8, position: Vector2<f32>) -> Option<u32> {
