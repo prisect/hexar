@@ -12,8 +12,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ```bash
 # Build and run
-cargo build --release
-cargo run --release
+cargo build
+RUST_LOG=trace cargo run --example main
 ```
 
 > [!NOTE]
@@ -26,6 +26,7 @@ cargo run --release
 - USB-to-TTL converter (CP2102, FT232RL)
 - UART interface (3.3V / 5V)
 - central processing unit/FPGA
+- *used LD2412 and LD2450, Hi-Link Electronics, 24GHz mmWave
 
 ## software
 ### dev
@@ -52,3 +53,10 @@ cargo run --release
 - rosbag2
 - rviz2
 
+## LD24
+LD2412 and LD2450 driver, made in rust.
+
+Example plot of LD2412:
+<br>
+<br>
+<img src="https://github.com/prisect/hexar/blob/main/out.png">
