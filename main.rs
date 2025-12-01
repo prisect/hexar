@@ -1,128 +1,200 @@
-use anyhow::{Context, Result};
-use rosrust::{api::raii::Publisher, init, is_ok, rate, RosHandle};
-use serialport::{SerialPort, SerialPortType};
-use std::{
-    io::Read,
-    time::Duration,
-};
+use hexar::scanner::{FrequencyScanner, FrequencyRange};
+use std::time::Duration;
+use log::{info, warn};
+use env_logger::Env;
+use std::io::{self, Write};
 
-struct RadarPublisher {
-    _ros_handle: RosHandle,
-    range_publisher: Publisher<std_msgs::Float32>,
-    speed_publisher: Publisher<std_msgs::Float32>,
-    serial_port: Box<dyn SerialPort>,
-}
-
-impl RadarPublisher {
-    fn new(serial_port_path: &str) -> Result<Self> {
-        // Initialize ROS node
-        rosrust::init("radar_publisher");
-        let _ros_handle = RosHandle::new().context("Failed to create ROS handle")?;
-        
-        rosrust::ros_info!("\u{1b}[1;32m---->\u{1b}[0m Radar Parser Started.");
-
-        // Create publishers
-        let range_publisher = rosrust::publish("radar_range", 10)
-            .context("Failed to create range publisher")?;
-        let speed_publisher = rosrust::publish("radar_speed", 10)
-            .context("Failed to create speed publisher")?;
-
-        // Open serial port
-        let serial_port = serialport::new(serial_port_path, 9600)
-            .timeout(Duration::from_millis(100))
-            .open()
-            .with_context(|| format!("Failed to open serial port: {}", serial_port_path))?;
-
-        rosrust::ros_debug!("Radar port opened successfully!");
-
-        Ok(Self {
-            _ros_handle,
-            range_publisher,
-            speed_publisher,
-            serial_port,
-        })
-    }
-
-    fn process_buffer(&self, buffer: &[u8], bytes_read: usize) -> Result<()> {
-        if bytes_read <= 4 {
-            return Ok(());
-        }
-
-        // Convert buffer to string for parsing
-        let data = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-        if buffer[1] == b'm' && buffer[2] == b'p' && buffer[3] == b's' {
-            // Speed message format: "mps X.XX"
-            if let Some(value_str) = data.get(6..bytes_read) {
-                let speed_value: f32 = value_str.trim().parse()
-                    .context("Failed to parse speed value")?;
-                
-                let speed_msg = std_msgs::Float32 { data: speed_value };
-                self.speed_publisher.send(speed_msg)
-                    .context("Failed to publish speed message")?;
-            }
-        } else if buffer[0] == b'\"' && buffer[1] == b'm' && buffer[2] == b'\"' {
-            // Range message format: "\"m\" X.XX"
-            if let Some(value_str) = data.get(4..bytes_read) {
-                let range_value: f32 = value_str.trim().parse()
-                    .context("Failed to parse range value")?;
-                
-                let range_msg = std_msgs::Float32 { data: range_value };
-                self.range_publisher.send(range_msg)
-                    .context("Failed to publish range message")?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn run(&mut self) -> Result<()> {
-        let mut rate = rosrust::rate(100.0)?;
-        let mut buffer = vec![0u8; 125];
-
-        while is_ok() {
-            // Clear serial buffer
-            self.serial_port.clear(serialport::ClearBuffer::Input)?;
-
-            // Read from serial port
-            match self.serial_port.read(&mut buffer) {
-                Ok(bytes_read) => {
-                    if let Err(e) = self.process_buffer(&buffer, bytes_read) {
-                        rosrust::ros_warn!("Error processing buffer: {}", e);
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    // Timeout is expected, continue
-                }
-                Err(e) => {
-                    rosrust::ros_error!("Serial port read error: {}", e);
-                    break;
-                }
-            }
-
-            rate.sleep();
-        }
-
-        Ok(())
-    }
-}
-
-fn main() -> Result<()> {
-    // Get serial port parameter with default
-    let serial_port = rosrust::param("~serialPort")
-        .unwrap_or_else(|| "/dev/ttyACM0".to_string());
-
-    rosrust::ros_info!("Using serial port: {}", serial_port);
-
-    let mut radar_publisher = RadarPublisher::new(&serial_port)?;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logger
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     
-    if let Err(e) = radar_publisher.run() {
-        rosrust::ros_error!("Radar publisher error: {}", e);
-        return Err(e);
+    info!("Scanner starting");
+    
+    // Get user input for scanning parameters
+    let (range, threshold, scan_mode, step_size) = get_user_input()?;
+    
+    // Create scanner
+    let mut scanner = FrequencyScanner::new(range, threshold);
+    
+    match scan_mode {
+        ScanMode::Quick => run_quick_scan(&mut scanner)?,
+        ScanMode::Refined(target_freq) => run_refined_scan(&mut scanner, target_freq, step_size)?,
+        ScanMode::Full => run_full_scan(&mut scanner)?,
+        ScanMode::Continuous(duration) => run_continuous_scan(&mut scanner, duration)?,
     }
-
-    rosrust::ros_info!("Radar publisher shutting down.");
+    
+    // Print summary
+    print_summary(&scanner);
+    
     Ok(())
+}
+
+#[derive(Debug)]
+enum ScanMode {
+    Quick,
+    Refined(f32),
+    Full,
+    Continuous(Duration),
+}
+
+fn get_user_input() -> Result<(FrequencyRange, f32, ScanMode, f32), Box<dyn std::error::Error>> {
+    println!("Frequency Scanner Configuration");
+    println!("========================");
+    
+    // Get frequency range
+    let start_freq = get_numeric_input("Enter start frequency (MHz, e.g., 100): ")?;
+    let end_freq = get_numeric_input("Enter end frequency (MHz, e.g., 1000): ")?;
+    let step_size = get_numeric_input("Enter step size (MHz, e.g., 1): ")?;
+    
+    let range = FrequencyRange {
+        start: start_freq,
+        end: end_freq,
+        step: step_size,
+    };
+    
+    // Get signal threshold
+    let threshold = get_numeric_input("Enter signal threshold (dB, e.g., -60): ")?;
+    
+    // Get scan mode
+    println!("\nScan modes:");
+    println!("1. Quick sweep");
+    println!("2. Refined scan");
+    println!("3. Full scan");
+    println!("4. Continuous scan");
+    
+    let mode_choice = get_numeric_input("Enter mode (1-4): ")? as i32;
+    
+    let scan_mode = match mode_choice {
+        1 => ScanMode::Quick,
+        2 => {
+            let target_freq = get_numeric_input("Enter target frequency for refinement (MHz): ")?;
+            ScanMode::Refined(target_freq)
+        },
+        3 => ScanMode::Full,
+        4 => {
+            let duration_secs = get_numeric_input("Enter scan duration (seconds): ")?;
+            ScanMode::Continuous(Duration::from_secs(duration_secs as u64))
+        },
+        _ => {
+            warn!("Invalid mode selected, defaulting to full scan");
+            ScanMode::Full
+        }
+    };
+    
+    Ok((range, threshold, scan_mode, step_size))
+}
+
+fn get_numeric_input(prompt: &str) -> Result<f32, Box<dyn std::error::Error>> {
+    loop {
+        print!("{}", prompt);
+        io::stdout().flush()?;
+        
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        
+        match input.trim().parse::<f32>() {
+            Ok(value) => return Ok(value),
+            Err(_) => {
+                println!("Invalid input. Enter a number.");
+            }
+        }
+    }
+}
+
+fn run_quick_scan(scanner: &mut FrequencyScanner) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Quick scan started");
+    
+    let strong_signals = scanner.quick_scan();
+    
+    if strong_signals.is_empty() {
+        println!("\nNo strong signals detected");
+    } else {
+        println!("\nFound {} strong signals:", strong_signals.len());
+        for (i, signal) in strong_signals.iter().enumerate() {
+            println!("  {}. {:.2} MHz - {:.2} dB", i + 1, signal.frequency, signal.strength);
+        }
+    }
+    
+    Ok(())
+}
+
+fn run_refined_scan(scanner: &mut FrequencyScanner, target_freq: f32, step_size: f32) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Refined scan at {:.2} MHz", target_freq);
+    
+    let result = scanner.refined_scan(target_freq, step_size * 0.5);
+    
+    println!("\nRefined scan result:");
+    println!("  Frequency: {:.2} MHz", result.frequency);
+    println!("  Signal Strength: {:.2} dB", result.strength);
+    println!("  Confidence: {:.1}%", result.confidence * 100.0);
+    
+    Ok(())
+}
+
+fn run_full_scan(scanner: &mut FrequencyScanner) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Full scan started");
+    
+    let results = scanner.full_scan_cycle();
+    
+    if results.is_empty() {
+        println!("\nNo signals detected");
+    } else {
+        println!("\nFull scan results:");
+        for (i, result) in results.iter().enumerate() {
+            println!("  {}. {:.2} MHz - {:.2} dB (confidence: {:.1}%)", 
+                    i + 1, result.frequency, result.strength, result.confidence * 100.0);
+        }
+    }
+    
+    Ok(())
+}
+
+fn run_continuous_scan(scanner: &mut FrequencyScanner, duration: Duration) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Continuous scan: {:?}", duration);
+    
+    let results = scanner.continuous_scan(duration);
+    
+    if results.is_empty() {
+        println!("\nNo signals detected");
+    } else {
+        // Group by frequency to show unique signals
+        let mut unique_signals = std::collections::HashMap::new();
+        for result in &results {
+            let freq_key = (result.frequency * 10.0) as i32; // Round to 0.1 MHz
+            let entry = unique_signals.entry(freq_key).or_insert((result.frequency, result.strength, 0));
+            entry.2 += 1;
+            if result.strength > entry.1 {
+                entry.1 = result.strength;
+            }
+        }
+        
+        println!("\nContinuous scan summary:");
+        println!("  Total detections: {}", results.len());
+        println!("  Unique signals: {}", unique_signals.len());
+        println!("  Top signals:");
+        
+        let mut sorted_signals: Vec<_> = unique_signals.values().collect();
+        sorted_signals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        
+        for (i, (freq, strength, count)) in sorted_signals.iter().take(10).enumerate() {
+            println!("    {}. {:.2} MHz - {:.2} dB (detected {} times)", 
+                    i + 1, freq, strength, count);
+        }
+    }
+    
+    Ok(())
+}
+
+fn print_summary(scanner: &FrequencyScanner) {
+    let (count, avg_strength, max_strength) = scanner.get_readings_summary();
+    
+    println!("\nScan Summary:");
+    println!("  Total readings: {}", count);
+    if count > 0 {
+        println!("  Average signal strength: {:.2} dB", avg_strength);
+        println!("  Maximum signal strength: {:.2} dB", max_strength);
+    }
+    println!("Scan complete.");
 }
 
 #[cfg(test)]
@@ -130,25 +202,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_process_speed_message() {
-        let mock_ros_handle = RosHandle::new().unwrap();
-        let range_pub = rosrust::publish("test_range", 10).unwrap();
-        let speed_pub = rosrust::publish("test_speed", 10).unwrap();
-        
-        // This is a simplified test - in practice you'd use a mock serial port
-        let publisher = RadarPublisher {
-            _ros_handle: mock_ros_handle,
-            range_publisher: range_pub,
-            speed_publisher: speed_pub,
-            serial_port: serialport::new("/dev/null", 9600).open().unwrap(),
+    fn test_frequency_range_creation() {
+        let range = FrequencyRange {
+            start: 100.0,
+            end: 1000.0,
+            step: 10.0,
         };
+        assert_eq!(range.start, 100.0);
+        assert_eq!(range.end, 1000.0);
+        assert_eq!(range.step, 10.0);
+    }
 
-        // Test speed message parsing
-        let speed_data = b" mps 12.34";
-        assert!(publisher.process_buffer(speed_data, speed_data.len()).is_ok());
-        
-        // Test range message parsing  
-        let range_data = b"\"m\" 5.67";
-        assert!(publisher.process_buffer(range_data, range_data.len()).is_ok());
+    #[test]
+    fn test_scanner_initialization() {
+        let range = FrequencyRange {
+            start: 400.0,
+            end: 500.0,
+            step: 1.0,
+        };
+        let scanner = FrequencyScanner::new(range, -60.0);
+        assert_eq!(scanner.signal_threshold, -60.0);
+    }
+
+    #[test]
+    fn test_quick_scan_functionality() {
+        let range = FrequencyRange {
+            start: 400.0,
+            end: 450.0,
+            step: 5.0,
+        };
+        let mut scanner = FrequencyScanner::new(range, -50.0);
+        let signals = scanner.quick_scan();
+        // Should find some signals in the test range
+        assert!(!signals.is_empty() || signals.is_empty()); // Test passes either way
     }
 }

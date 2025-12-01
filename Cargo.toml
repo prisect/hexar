@@ -1,12 +1,16 @@
 [package]
 name = "hexar"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[[bin]]
+name = "hexar"
+path = "main.rs"
 
 [dependencies]
 log = "0.4.22"
-smallvec = { version = "1.14.0"}
+smallvec = { version = "1.14.0" }
+env_logger = "0.11.5"
 
 [dev-dependencies]
 serialport = "4.6.0"
-env_logger = "0.11.5"
