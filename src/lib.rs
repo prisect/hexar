@@ -6,7 +6,7 @@ pub mod ld2412;
 pub mod ld2450;
 pub mod scanner;
 pub mod tracker;
-pub mod tracker_demo;
+pub mod parser;
 
 pub trait RadarDriver {
     fn get_opcode(&self) -> u16;

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use nalgebra::{Vector2, Matrix2};
 use log::{debug, info, warn};
+use smallvec::SmallVec;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TargetState {
@@ -15,17 +16,18 @@ pub enum TargetState {
 pub struct TrackedTarget {
     pub id: u32,
     pub antenna_id: u8,
-    pub position: Vector2<f32>,      // x, y in meters
-    pub velocity: Vector2<f32>,      // velocity in m/s
-    pub acceleration: Vector2<f32>,   // acceleration in m/s²
+    pub position: Vector2<f32>,
+    pub velocity: Vector2<f32>,
+    pub acceleration: Vector2<f32>,
     pub state: TargetState,
-    pub confidence: f32,             // 0.0 - 1.0
+    pub confidence: f32,
     pub last_update: Instant,
     pub prediction_count: u32,
     pub fall_probability: f32,
 }
 
 impl TrackedTarget {
+    #[inline]
     pub fn new(id: u32, antenna_id: u8, position: Vector2<f32>) -> Self {
         Self {
             id,
@@ -41,6 +43,7 @@ impl TrackedTarget {
         }
     }
 
+    #[inline]
     pub fn update_position(&mut self, new_position: Vector2<f32>, dt: f32) {
         if dt > 0.0 {
             let new_velocity = (new_position - self.position) / dt;
@@ -53,11 +56,13 @@ impl TrackedTarget {
         }
     }
 
+    #[inline]
     pub fn predict_position(&mut self, dt: f32) -> Vector2<f32> {
         // Kinematic prediction: p = p0 + v*t + 0.5*a*t²
-        self.position + self.velocity * dt + 0.5 * self.acceleration * dt.powi(2)
+        self.position + self.velocity * dt + 0.5 * self.acceleration * dt * dt
     }
 
+    #[inline]
     pub fn is_falling(&self) -> bool {
         self.fall_probability > 0.7
     }
@@ -73,6 +78,9 @@ pub struct KalmanFilter {
     process_noise: Matrix6,
     // Measurement noise
     measurement_noise: Matrix2<f32>,
+    // Pre-computed matrices for performance
+    state_transition: Matrix6,
+    measurement_matrix: Matrix2x6,
 }
 
 type Vector6 = nalgebra::SVector<f32, 6>;
@@ -88,17 +96,27 @@ impl KalmanFilter {
         let process_noise = Matrix6::identity() * 0.1;
         let measurement_noise = Matrix2::identity() * 1.0;
 
+        // Pre-compute static matrices
+        let measurement_matrix = Matrix2x6::new(
+            1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
+        );
+
         Self {
             state,
             covariance,
             process_noise,
             measurement_noise,
+            state_transition: Matrix6::identity(),
+            measurement_matrix,
         }
     }
 
+    #[inline]
     pub fn predict(&mut self, dt: f32) {
-        // State transition matrix F
-        let mut f = Matrix6::identity();
+        // Update state transition matrix F
+        let f = &mut self.state_transition;
+        *f = Matrix6::identity();
         f[(0, 2)] = dt;  // x += vx * dt
         f[(1, 3)] = dt;  // y += vy * dt
         f[(0, 4)] = 0.5 * dt * dt;  // x += 0.5 * ax * dt²
@@ -107,40 +125,47 @@ impl KalmanFilter {
         f[(3, 5)] = dt;  // vy += ay * dt
 
         // Predict state
-        self.state = f * self.state;
+        self.state = *f * self.state;
         // Predict covariance
-        self.covariance = f * self.covariance * f.transpose() + self.process_noise;
+        self.covariance = *f * self.covariance * f.transpose() + self.process_noise;
     }
 
+    #[inline]
     pub fn update(&mut self, measurement: Vector2<f32>) {
-        // Measurement matrix H (only position is measured)
-        let h = Matrix2x6::new(
-            1.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0, 0.0, 0.0,
-        );
-
         // Innovation
-        let innovation = Vector2::new(measurement.x - self.state[0], measurement.y - self.state[1]);
+        let innovation = Vector2::new(
+            measurement.x - self.state[0], 
+            measurement.y - self.state[1]
+        );
+        
         // Innovation covariance
-        let innovation_covariance = h * self.covariance * h.transpose() + self.measurement_noise;
+        let h = &self.measurement_matrix;
+        let innovation_covariance = *h * self.covariance * h.transpose() + self.measurement_noise;
+        
         // Kalman gain
         let kalman_gain = self.covariance * h.transpose() * innovation_covariance.try_inverse().unwrap();
 
         // Update state
-        self.state = self.state + kalman_gain * innovation;
+        let state_update = kalman_gain * innovation;
+        self.state[0] += state_update[0];
+        self.state[1] += state_update[1];
+        
         // Update covariance
         let identity = Matrix6::identity();
         self.covariance = (identity - kalman_gain * h) * self.covariance;
     }
 
+    #[inline]
     pub fn get_position(&self) -> Vector2<f32> {
         Vector2::new(self.state[0], self.state[1])
     }
 
+    #[inline]
     pub fn get_velocity(&self) -> Vector2<f32> {
         Vector2::new(self.state[2], self.state[3])
     }
 
+    #[inline]
     pub fn get_acceleration(&self) -> Vector2<f32> {
         Vector2::new(self.state[4], self.state[5])
     }
@@ -157,6 +182,7 @@ pub struct FallDetector {
 }
 
 impl FallDetector {
+    #[inline]
     pub fn new() -> Self {
         Self {
             gravity_threshold: -9.5,  // m/s²
@@ -167,10 +193,12 @@ impl FallDetector {
     }
 
     #[allow(dead_code)]
+    #[inline]
     pub fn get_time_window(&self) -> Duration {
         self.time_window
     }
 
+    #[inline]
     pub fn analyze_fall_risk(&self, target: &TrackedTarget) -> f32 {
         let mut risk_score: f32 = 0.0;
 
@@ -185,26 +213,29 @@ impl FallDetector {
         }
 
         // Check for sudden acceleration changes
-        let accel_magnitude = target.acceleration.magnitude();
+        let accel_magnitude = target.acceleration.norm();
         if accel_magnitude > self.acceleration_threshold {
             risk_score += 0.2;
         }
 
         // Check for rapid position changes
-        if target.velocity.magnitude() > self.velocity_threshold * 2.0 {
+        if target.velocity.norm() > self.velocity_threshold * 2.0 {
             risk_score += 0.1;
         }
 
         risk_score.min(1.0)
     }
 
-    pub fn predict_fall_trajectory(&self, target: &TrackedTarget, time_steps: usize) -> Vec<Vector2<f32>> {
-        let mut trajectory = Vec::new();
+    #[inline]
+    pub fn predict_fall_trajectory(&self, target: &TrackedTarget, time_steps: usize) -> SmallVec<[Vector2<f32>; 10]> {
+        let mut trajectory = SmallVec::new();
         let mut position = target.position;
         let mut velocity = target.velocity;
         let gravity = Vector2::new(0.0, -9.81);
         let dt = 0.05; // 50ms time steps
 
+        trajectory.reserve(time_steps);
+        
         for _ in 0..time_steps {
             velocity += gravity * dt;
             position += velocity * dt;
@@ -242,6 +273,7 @@ impl MultiTargetTracker {
         self.antenna_count
     }
 
+    #[inline]
     pub fn add_target(&mut self, antenna_id: u8, position: Vector2<f32>) -> Option<u32> {
         // Check antenna capacity
         let current_count = self.targets.values()
@@ -268,6 +300,7 @@ impl MultiTargetTracker {
         Some(target_id)
     }
 
+    #[inline]
     pub fn update_target(&mut self, target_id: u32, new_position: Vector2<f32>) -> bool {
         if let (Some(target), Some(kalman_filter)) = 
             (self.targets.get_mut(&target_id), self.kalman_filters.get_mut(&target_id)) {
@@ -368,7 +401,8 @@ impl MultiTargetTracker {
         self.targets.values().collect()
     }
 
-    pub fn get_fall_predictions(&self, target_id: u32, time_steps: usize) -> Option<Vec<Vector2<f32>>> {
+    #[inline]
+    pub fn get_fall_predictions(&self, target_id: u32, time_steps: usize) -> Option<SmallVec<[Vector2<f32>; 10]>> {
         if let Some(target) = self.targets.get(&target_id) {
             Some(self.fall_detector.predict_fall_trajectory(target, time_steps))
         } else {

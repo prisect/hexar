@@ -5,9 +5,9 @@ hexagon-shaped radar. 6 antennas, 1 brain. default 24Ghz, maybe will plan for mo
 ```bash
 # Prepare machine
 sudo usermod -aG input $(whoami)
-# Restart your machine (required)
-git clone --recursive https://github.com/prisect/hexar
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# Restart your machine
+git clone --recursive https://github.com/prisect/hexar
 ```
 
 ```bash
@@ -16,13 +16,9 @@ cargo build
 RUST_LOG=trace cargo run --example main
 ```
 
-> [!NOTE]
-> Software runs on sensitive peices of hardware.
-> Run at your own risk :)
-
 ## dependencies
 - 6 antennas
-- [hexar sdr](https://card.hexar/) card
+- hexar sdr card
 - USB-to-TTL converter (CP2102, FT232RL)
 - UART interface (3.3V / 5V)
 - central processing unit/FPGA
