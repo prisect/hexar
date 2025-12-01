@@ -5,7 +5,7 @@ edition = "2021"
 
 [[bin]]
 name = "hexar"
-path = "main.rs"
+path = "src/main.rs"
 
 [dependencies]
 log = "0.4.22"
