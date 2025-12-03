@@ -13,7 +13,7 @@ git clone --recursive https://github.com/prisect/hexar
 ```bash
 # Build and run
 cargo build
-RUST_LOG=trace cargo run --example main
+cargo run --release
 ```
 
 ## dependencies
