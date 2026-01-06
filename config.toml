@@ -1,0 +1,85 @@
+# Hexar Radar System - Production Configuration
+
+# System Configuration
+[system]
+system_id = "00000000-0000-0000-0000-000000000000"
+name = "Hexar Production Radar"
+description = "Hexagonal 24GHz/77GHz radar system with 6 antennas"
+
+# Radar Configuration
+[radar]
+antenna_count = 6
+default_frequency = 24000.0  # 24 GHz
+
+[radar.frequency_range]
+start_mhz = 24000.0
+end_mhz = 24500.0
+step_mhz = 1.0
+
+[radar.scan_mode]
+# Can be "Continuous", "Intermittent", or "OnDemand"
+mode = "Continuous"
+
+[radar.power_settings]
+transmit_power_watts = 10.0
+duty_cycle = 0.8
+power_saving = false
+
+[radar.signal_processing]
+threshold_db = -60.0
+filter_strength = 0.7
+noise_reduction = true
+target_tracking = true
+
+# Safety Configuration
+[safety]
+emergency_stop_enabled = true
+
+[safety.temperature_limits]
+warning_celsius = 70.0
+critical_celsius = 85.0
+shutdown_celsius = 95.0
+
+[safety.power_limits]
+max_power_watts = 100.0
+surge_protection = true
+voltage_tolerance = 0.1
+
+[safety.radiation_limits]
+max_exposure_time_minutes = 60
+power_density_limit = 10.0
+distance_requirement_meters = 3.0
+
+[safety.auto_shutdown]
+enabled = true
+idle_timeout_minutes = 30
+error_threshold = 10
+performance_degradation_threshold = 0.8
+
+[safety.maintenance_schedule]
+inspection_interval_hours = 168  # 1 week
+calibration_interval_hours = 720  # 1 month
+cleaning_interval_hours = 336    # 2 weeks
+last_maintenance = "2024-01-01T00:00:00Z"
+
+# Monitoring Configuration
+[monitoring]
+metrics_collection = true
+performance_tracking = true
+alert_system = true
+data_retention_days = 30
+export_interval_minutes = 15
+health_check_interval_seconds = 30
+
+# Logging Configuration
+[logging]
+level = "info"
+file_logging = true
+console_logging = true
+log_directory = "logs"
+max_file_size_mb = 100
+max_files = 10
+
+[logging.rotation]
+# Can be "Daily", "Weekly", or "Size"
+rotation = "Daily"

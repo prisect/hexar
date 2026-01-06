@@ -22,8 +22,19 @@ cargo run --release
 - USB-to-TTL converter (CP2102, FT232RL)
 - UART interface (3.3V / 5V)
 - central processing unit/FPGA
+- Arduino nano & duo
 - *used LD2412 and LD2450, Hi-Link Electronics, 24GHz mmWave
+- RS232+BT
+- GY-4988
+- nRF24L01
+- Doppler Radar RS3400 (77GHz)
+- Doppler Radar KLC-6 (24GHz)
+- GPS+RTL
+- Power regulator (YL105)
+- (optional) XY42STH34-1504A (High Stepper motor)
+- (optional) Op Amp
 - (optional) LNA [nooelec SAWBird+GOES L-band](https://amzn.to/41CO8sG) for l-band, see bottom
+
 
 ## software
 ### dev
@@ -32,6 +43,18 @@ cargo run --release
 - gcc
 - make
 - cmake
+- toml
+
+### specs
+
+```
+Carrier frequnecy     24GHz          77GHz
+Signal bandwidth      15kHz          0.15MHz
+Transmit power        20 +/- 1 dBm   25 +/- 2 dBm
+Antenna Gain          20 dB          20 dB
+H-plane beamwidth     80 deg         15 deg
+E-plane beamwidth     12 deg         15 deg
+```
 
 ### py
 - pyserial >= 3.5

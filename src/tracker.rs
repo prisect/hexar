@@ -68,7 +68,7 @@ impl TrackedTarget {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct KalmanFilter {
     // State vector: [x, y, vx, vy, ax, ay]
     state: Vector6,
@@ -173,7 +173,7 @@ impl KalmanFilter {
 
 type Matrix2x6 = nalgebra::SMatrix<f32, 2, 6>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FallDetector {
     gravity_threshold: f32,
     velocity_threshold: f32,
@@ -246,7 +246,7 @@ impl FallDetector {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MultiTargetTracker {
     targets: HashMap<u32, TrackedTarget>,
     kalman_filters: HashMap<u32, KalmanFilter>,

@@ -1,12 +1,24 @@
 
-use log::warn;
-use smallvec::SmallVec;
+pub mod config;
+pub mod safety;
+pub mod monitoring;
+pub mod radar_controller;
+pub mod error;
 
 pub mod ld2412;
 pub mod ld2450;
 pub mod scanner;
 pub mod tracker;
 pub mod parser;
+
+pub use error::{HexarError, HexarResult};
+pub use config::HexarConfig;
+pub use safety::SafetyManager;
+pub use monitoring::MonitoringSystem;
+pub use radar_controller::RadarController;
+
+use log::warn;
+use smallvec::SmallVec;
 
 pub trait RadarDriver {
     fn get_opcode(&self) -> u16;

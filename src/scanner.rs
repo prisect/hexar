@@ -15,13 +15,14 @@ pub struct SignalReading {
     pub timestamp: Instant,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ScanResult {
     pub frequency: f32,
     pub strength: f32,
     pub confidence: f32,
 }
 
+#[derive(Debug, Clone)]
 pub struct FrequencyScanner {
     current_range: FrequencyRange,
     signal_threshold: f32,
