@@ -58,7 +58,7 @@ LD2412 and LD2450 driver, made in rust.
 Example plot of LD2412:
 <br>
 <br>
-<img src="https://github.com/prisect/hexar/blob/main/out.png">
+<img width="1024" height="692" alt="image" src="https://github.com/user-attachments/assets/20b9098c-cc6e-469a-911f-d42aff00e82d" />
 
 # other stuff
 
